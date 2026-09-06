@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0d1117">
+    <title>ESP32-C6 Шагомер - Android Синхронизация и Выгрузка</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="brand">
+                <div class="brand-icon">👟</div>
+                <div class="brand-text">
+                    <h1>ESP32-C6 Pedometer</h1>
+                    <p class="subtitle">Панель управления и выгрузка данных в Android</p>
+                </div>
+            </div>
+            <div class="ble-status-badge disconnected" id="bleStatusBadge">
+                <span class="status-dot"></span>
+                <span id="bleStatusText">Отключено</span>
+            </div>
+        </header>
+
+        <!-- Connection Action Banner -->
+        <section class="connect-card" id="connectCard">
+            <div class="connect-info">
+                <h3>Подключение к устройству</h3>
+                <p>Нажмите кнопку ниже для поиска и синхронизации с Waveshare ESP32-C6 по Bluetooth LE.</p>
+            </div>
+            <button class="btn btn-primary" id="btnConnect">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 7 10 10-5 5V2l5 5L7 17"/></svg>
+                <span>Подключить шагомер (BLE)</span>
+            </button>
+        </section>
+
+        <!-- Main Live Dashboard -->
+        <section class="dashboard-grid">
+            <!-- Giant Step Counter Card -->
+            <div class="card card-hero">
+                <div class="hero-header">
+                    <span class="card-tag">ТЕКУЩИЕ ШАГИ ЗА СЕГОДНЯ</span>
+                    <span class="mode-pill" id="modePill">WALK</span>
+                </div>
+                <div class="hero-metric">
+                    <span class="step-count" id="liveSteps">0</span>
+                    <span class="step-unit">шагов</span>
+                </div>
+                <!-- Progress Ring / Bar -->
+                <div class="goal-progress-wrap">
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar-fill" id="progressBarFill" style="width: 0%;"></div>
+                    </div>
+                    <div class="goal-labels">
+                        <span id="goalPercentText">0% от цели</span>
+                        <span id="goalTargetText">Цель: 10 000</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mini 4-Metric Grid -->
+            <div class="metrics-subgrid">
+                <div class="card metric-card">
+                    <div class="metric-icon cyan">📍</div>
+                    <div class="metric-data">
+                        <span class="metric-val" id="liveDist">0.00</span>
+                        <span class="metric-label">Дистанция (км)</span>
+                    </div>
+                </div>
+
+                <div class="card metric-card">
+                    <div class="metric-icon orange">🔥</div>
+                    <div class="metric-data">
+                        <span class="metric-val" id="liveKcal">0</span>
+                        <span class="metric-label">Калории (ккал)</span>
+                    </div>
+                </div>
+
+                <div class="card metric-card">
+                    <div class="metric-icon purple">⏱️</div>
+                    <div class="metric-data">
+                        <span class="metric-val" id="liveCadence">0</span>
+                        <span class="metric-label">Темп (шаг/мин)</span>
+                    </div>
+                </div>
+
+                <div class="card metric-card">
+                    <div class="metric-icon yellow">⚡</div>
+                    <div class="metric-data">
+                        <span class="metric-val" id="liveSpeed">0.0</span>
+                        <span class="metric-label">Скорость (км/ч)</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Hourly Activity Graph -->
+        <section class="card chart-card">
+            <div class="chart-header">
+                <h3>📊 Почасовая активность (24 часа)</h3>
+                <button class="btn btn-sm btn-outline" id="btnRefreshHistory">Обновить график</button>
+            </div>
+            <div class="chart-container">
+                <canvas id="hourlyChart" width="600" height="200"></canvas>
+            </div>
+        </section>
+
+        <!-- Export & Synchronization Section -->
+        <section class="card export-card">
+            <div class="export-header">
+                <h3>📥 Выгрузка и экспорт данных</h3>
+                <p>Экспортируйте данные активности для Google Fit, Excel, Strava или архива</p>
+            </div>
+            <div class="export-buttons-grid">
+                <button class="btn btn-export btn-csv" id="btnExportCsv">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <span>Выгрузить в CSV (Excel)</span>
+                </button>
+                <button class="btn btn-export btn-json" id="btnExportJson">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <span>Выгрузить JSON (Google Fit)</span>
+                </button>
+                <button class="btn btn-export btn-copy" id="btnCopyClipboard">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                    <span>Скопировать сводку</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- Remote Simulator Control -->
+        <section class="card control-card">
+            <div class="control-header">
+                <h3>🎮 Дистанционное управление имитатором</h3>
+                <p>Изменяйте параметры симуляции и добавляйте шаги прямо с телефона</p>
+            </div>
+
+            <!-- Mode Switchers -->
+            <div class="control-group">
+                <label>Режим движения:</label>
+                <div class="mode-btn-group">
+                    <button class="btn-mode" data-cmd="PAUSE">⏸️ Пауза</button>
+                    <button class="btn-mode active" data-cmd="WALK">🚶 Ходьба (100)</button>
+                    <button class="btn-mode" data-cmd="JOG">🏃 Трусца (135)</button>
+                    <button class="btn-mode" data-cmd="RUN">⚡ Бег (165)</button>
+                </div>
+            </div>
+
+            <!-- Cadence Slider -->
+            <div class="control-group">
+                <div class="slider-header">
+                    <label for="cadenceSlider">Темп шагов:</label>
+                    <span class="slider-val" id="cadenceValDisplay">100 шаг/мин</span>
+                </div>
+                <input type="range" id="cadenceSlider" min="40" max="220" value="100" class="range-slider">
+            </div>
+
+            <!-- Quick Step Adders -->
+            <div class="control-group">
+                <label>Быстрое добавление шагов:</label>
+                <div class="quick-add-grid">
+                    <button class="btn btn-sm btn-quick" data-add="500">+500 шагов</button>
+                    <button class="btn btn-sm btn-quick" data-add="1000">+1000 шагов</button>
+                    <button class="btn btn-sm btn-quick" data-add="5000">+5000 шагов</button>
+                    <button class="btn btn-sm btn-quick btn-danger" id="btnResetSteps">Сброс</button>
+                </div>
+            </div>
+
+            <!-- Sync Time & Custom Goal -->
+            <div class="control-group dual-row">
+                <div class="input-wrap">
+                    <label for="inputCustomGoal">Цель шагов:</label>
+                    <div class="input-with-btn">
+                        <input type="number" id="inputCustomGoal" value="10000" min="100" step="500">
+                        <button class="btn btn-sm" id="btnSetGoal">Задать</button>
+                    </div>
+                </div>
+                <div class="input-wrap">
+                    <label>Время:</label>
+                    <button class="btn btn-sm btn-outline w-100" id="btnSyncTime">Синхронизировать часы</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Log / Terminal Output -->
+        <section class="card log-card">
+            <details>
+                <summary>Журнал BLE сообщений</summary>
+                <div class="terminal" id="terminalLog">
+                    [Система] Готов к поиску устройства ESP32-C6-Pedometer...
+                </div>
+            </details>
+        </section>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p>Разработано для Waveshare ESP32-C6-LCD-1.47 • Поддержка стандарта BLE RSC (0x1814)</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
