@@ -105,7 +105,9 @@ jobs:
 
       - name: Build debug APK
         working-directory: android_native_app
-        run: ./gradlew --no-daemon assembleDebug
+        # gradle.properties pins a Windows JDK path for local builds; the CLI
+        # system property takes precedence and points the build at the CI JDK.
+        run: ./gradlew --no-daemon -Dorg.gradle.java.home="$JAVA_HOME" assembleDebug
 
       - name: Stage APK
         working-directory: android_native_app
