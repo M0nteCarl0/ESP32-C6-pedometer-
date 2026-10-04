@@ -1,219 +1,254 @@
-# 👟 Прошивка Имитатора Шагомера для Waveshare ESP32-C6-LCD-1.47
+# ESP32-C6 Pedometer Firmware for Waveshare ESP32-C6-LCD-1.47
 
-Полнофункциональная прошивка умного имитатора шагомера / фитнес-трекера для платы **Waveshare ESP32-C6-LCD-1.47** со встроенным цветным IPS дисплеем 1.47" (ST7789 172×320), адресным RGB светодиодом WS2812, энергонезависимой памятью NVS, стандартом **Bluetooth LE RSC (Running Speed and Cadence)** и **веб-приложением для синхронизации / выгрузки шагов в Android**.
-
----
-
-## 📋 Основные возможности
-
-1. **Реалистичная симуляция ходьбы и бега**:
-   - Несколько режимов: `PAUSE` (пауза), `WALK` (ходьба ~100 шаг/мин, 4.5 км/ч), `JOG` (трусца ~135 шаг/мин, 7.0 км/ч), `RUN` (бег ~165 шаг/мин, 10.5 км/ч), `CUSTOM` (произвольный темп от 30 до 240 шаг/мин).
-   - Естественная вариативность шага (микро-джиттер интервалов ±4%), исключающая механическую периодичность.
-   - Расчет дистанции (км), сожженных калорий (ккал по формуле MET), мгновенной скорости (км/ч) и времени в движении.
-   - Почасовое логирование (24 часа) и история за последние 7 дней.
-   - Автосохранение в Flash (NVS) при паузе и каждые 50 шагов (данные не сбрасываются при отключении питания).
-
-2. **Графический интерфейс на экране 1.47" (172×320 IPS ST7789)**:
-   - Крупный контрастный счетчик шагов и индикатор выполнения дневной цели (прогресс-бар).
-   - Информационные карточки: Дистанция (км), Калории (ккал), Темп (шаг/мин), Скорость (км/ч).
-   - Верхняя панель: статус BLE подключения, активный режим, процент заряда.
-   - Нижняя строка: общее активное время тренировки и подсказки по кнопке.
-   - **Термозащита дисплея**: яркость подсветки по умолчанию выставлена на безопасные 47% (PWM ~120/255) в соответствии с рекомендациями Waveshare для предотвращения нагрева матрицы.
-
-3. **Интерактивное управление**:
-   - Кнопка **BOOT (GPIO 9)**:
-     - Одиночный клик: переключение режимов (`WALK` → `JOG` → `RUN` → `PAUSE`).
-     - Двойной клик: мгновенное добавление `+500 шагов`.
-     - Удержание > 1.2 сек: Пауза / Возобновление.
-     - Удержание > 5 сек: Полный сброс дневной статистики.
-   - **RGB LED (GPIO 8)**:
-     - Мягкий зеленый импульс в такт каждому шагу.
-     - Синее свечение при подключении по BLE.
-     - Теплый янтарный цвет в режиме паузы.
-     - Праздничная анимация при достижении дневной цели (10 000 шагов).
-
-4. **Выгрузка и интеграция с Android**:
-   - 📱 **Web Bluetooth Companion (`android_web_companion/`)**:
-     - **Не требует установки APK!** Работает прямо в Google Chrome, Samsung Internet или Edge на Android.
-     - Интерактивный почасовой график активности за 24 часа.
-     - **Экспорт в CSV (Excel)**: скачивание файла с почасовой и суммарной статистикой.
-     - **Экспорт в JSON (Google Fit / Health Connect)**: структурированный массив интервалов активности.
-     - **Копирование сводки в буфер обмена** для быстрой отправки в мессенджеры/заметки.
-     - Дистанционный пульт: изменение темпа ползунком, кнопки `+500` / `+1000` / `+5000` шагов, установка цели, синхронизация часов.
-   - 🏃 **Стандартный BLE профиль RSC (0x1814 - Running Speed and Cadence)**:
-     - Распознается спортивными приложениями для Android: **Strava**, **Wahoo Fitness**, **nRF Toolbox**, **Polar Beat**, **Zwift**, **Gadgetbridge** как стандартный датчик бега/шагомер (footpod).
-   - 📦 **Нативный проект для Android Studio (`android_native_app/`)**:
-     - Исходный код приложения на Kotlin с автоматическим BLE сканированием и парсингом.
+A complete smart step-counter / fitness-tracker firmware for the **Waveshare ESP32-C6-LCD-1.47** board (1.47" color IPS display, ST7789 172x320), with an addressable WS2812 RGB LED, NVS flash persistence, a Bluetooth LE **Running Speed and Cadence (RSC)** profile, a browser-based companion panel, and a native Android app with GPS route emulation.
 
 ---
 
-## 🛠️ Расположение выводов (Pinout Waveshare ESP32-C6-LCD-1.47)
+## Features
 
-| Периферия | Сигнал | Вывод ESP32-C6 | Описание |
+### 1. Realistic walk / run simulation
+
+- Modes: `PAUSE`, `WALK` (~100 spm, 4.5 km/h), `JOG` (~135 spm, 7.0 km/h), `RUN` (~165 spm, 10.5 km/h) and `CUSTOM` (30 to 240 spm).
+- Natural step variation (interval micro-jitter of about 4%) so the output is not mechanically periodic.
+- Distance (km), calories (MET formula), instantaneous speed (km/h) and time in motion.
+- Hourly logging for 24 hours plus a 7-day history.
+- Automatic NVS persistence on pause and every 50 steps, so nothing is lost on power loss.
+
+### 2. On-screen UI (1.47" 172x320 IPS, ST7789)
+
+- Large step counter with a daily-goal progress arc.
+- Metric cards: distance (km), calories (kcal), cadence (spm), speed (km/h).
+- Header: BLE status badge, GPS status badge, active mode pill, battery percentage.
+- Footer: active time, or elapsed / remaining time when a movement-time target is set; the configured route name or the current GPS coordinates are shown below it.
+- Display thermal protection: backlight defaults to a safe 47% duty cycle (PWM 120/255), following WaveShare's recommendation to limit panel heating.
+
+### 3. Controls
+
+- **BOOT button (GPIO 9)**
+  - Single click: cycle modes (`WALK` -> `JOG` -> `RUN` -> `PAUSE`).
+  - Double click: add `+500` steps instantly.
+  - Hold longer than 1.2 s: pause / resume.
+  - Hold longer than 5 s: reset daily statistics.
+- **RGB LED (GPIO 8)**
+  - Soft green pulse on every step.
+  - Blue glow while a BLE client is connected.
+  - Warm amber in pause mode.
+  - Celebration animation when the daily goal (10,000 steps) is reached.
+
+### 4. Android integration
+
+- **Web Bluetooth companion (`android_web_companion/`)** - no APK required, runs in Chrome, Samsung Internet or Edge on Android:
+  - live hourly activity chart for the last 24 hours;
+  - CSV export of hourly and total statistics;
+  - JSON export structured for Google Fit / Health Connect;
+  - copy-summary-to-clipboard action;
+  - remote control: cadence slider, `+500` / `+1000` / `+5000` step buttons, goal setting and clock sync.
+- **Standard BLE RSC profile (`0x1814`)**: recognized as a running sensor / footpod by Strava, Wahoo Fitness, nRF Toolbox, Polar Beat, Zwift and Gadgetbridge.
+- **Native Android Studio project (`android_native_app/`)**: Kotlin app with automatic BLE scan and parsing, plus direct upload to Google Fit through Health Connect.
+
+### 5. GPS route emulation and map view
+
+- **Route map screen** (`app/src/main/assets/map.html`, Leaflet + OpenStreetMap tiles): tap the map to place waypoints, the polyline is redrawn live with total distance, and the current "runner" position follows the emulated track.
+- **Route manager** (`RouteManager.kt`): great-circle distance and bearing math, position interpolation along the polyline, seamless looping when the travelled distance exceeds the route length, three built-in preset loops (Gorky Park ~2.8 km, Luzhniki stadium ~1.4 km, Kremlin embankment ~3.6 km), and named routes saved in app storage.
+- **GPS emulator** (`GpsEmulatorManager.kt`): registers a test GPS provider, injects mock locations at 1 Hz using the speed received from the device, and streams `GPS:<lat>,<lon>` plus `ROUTE:<name>` to the ESP32 so the display shows live position and route.
+- **Targets from the app**: step goal and movement-time target can be set (with `5k` / `10k` / `15k` and `15m` / `30m` / `60m` shortcuts) or cleared; the device persists both.
+
+---
+
+## Pinout (Waveshare ESP32-C6-LCD-1.47)
+
+| Peripheral | Signal | ESP32-C6 pin | Description |
 | :--- | :--- | :--- | :--- |
-| **ST7789 LCD** | MOSI | `GPIO 6` | Данные SPI |
-| | SCLK | `GPIO 7` | Тактовый сигнал SPI |
-| | CS | `GPIO 14` | Выбор чипа дисплея |
-| | DC | `GPIO 15` | Команда / Данные |
-| | RST | `GPIO 21` | Аппаратный сброс дисплея |
-| | BL | `GPIO 22` | Управление подсветкой (PWM) |
-| **RGB LED** | DATA | `GPIO 8` | Адресный светодиод WS2812 |
-| **Кнопка** | BOOT | `GPIO 9` | Пользовательская кнопка (Active LOW) |
-| **MicroSD (TF)**| MISO | `GPIO 5` | Данные MicroSD SPI |
-| | MOSI | `GPIO 6` | Данные MicroSD SPI |
-| | SCLK | `GPIO 7` | Тактовый сигнал MicroSD SPI |
-| | CS | `GPIO 4` | Выбор чипа MicroSD |
+| **ST7789 LCD** | MOSI | `GPIO 6` | SPI data |
+| | SCLK | `GPIO 7` | SPI clock |
+| | CS | `GPIO 14` | Display chip select |
+| | DC | `GPIO 15` | Command / data |
+| | RST | `GPIO 21` | Display hardware reset |
+| | BL | `GPIO 22` | Backlight control (PWM) |
+| **RGB LED** | DATA | `GPIO 8` | WS2812 addressable LED |
+| **Button** | BOOT | `GPIO 9` | User button (active LOW) |
+| **MicroSD (TF)** | MISO | `GPIO 5` | MicroSD SPI data |
+| | MOSI | `GPIO 6` | MicroSD SPI data |
+| | SCLK | `GPIO 7` | MicroSD SPI clock |
+| | CS | `GPIO 4` | MicroSD chip select |
 
 ---
 
-## 🚀 Инструкция по сборке и прошивке
+## Build and flash
 
-### Вариант A: Через PlatformIO (VS Code) — Рекомендуется
+### Option A: PlatformIO (VS Code) - recommended
 
-1. Установите [Visual Studio Code](https://code.visualstudio.com/) и расширение **PlatformIO IDE**.
-2. Откройте папку `esp32_firmware/` в VS Code:
-   `File` → `Open Folder...` → выберите `esp32_firmware`.
-3. Подключите плату Waveshare ESP32-C6-LCD-1.47 через USB Type-C кабель к ПК.
-4. Нажмите кнопку **PlatformIO: Upload** (иконка стрелки в нижней синей строке) или выполните:
+1. Install [Visual Studio Code](https://code.visualstudio.com/) with the **PlatformIO IDE** extension.
+2. Open the `esp32_firmware/` folder: `File` -> `Open Folder...` -> select `esp32_firmware`.
+3. Connect the board over USB Type-C.
+4. Click **PlatformIO: Upload**, or run:
    ```bash
    pio run --target upload
    ```
-5. Откройте монитор порта:
+5. Open the serial monitor:
    ```bash
    pio device monitor
    ```
 
----
+The default environment is `esp32-c6-lcd-147`. `platformio.ini` pins `upload_port` / `monitor_port` to `COM13`; change those lines if your board enumerates on a different port.
 
-### Вариант B: Через Arduino IDE 2.x
+### Option B: Arduino IDE 2.x
 
-1. Установите **Arduino IDE 2.x**.
-2. В настройках (`File` → `Preferences`) добавьте URL менеджера плат:
+1. Install **Arduino IDE 2.x**.
+2. In `File` -> `Preferences`, add the board manager URL:
    `https://espressif.github.io/arduino-esp32/package_esp32_index.json`
-3. Откройте `Tools` → `Board` → `Boards Manager`, найдите **esp32** от Espressif и установите версию **3.0.0 или новее**.
-4. Откройте файл `esp32_firmware/esp32_c6_pedometer/esp32_c6_pedometer.ino`.
-5. В меню `Tools`:
-   - **Board**: `"ESP32C6 Dev Module"`
-   - **USB CDC On Boot**: `"Enabled"`
-   - **Flash Size**: `"4MB (32Mb)"`
-   - **Port**: выберите COM-порт вашей платы.
-6. Нажмите **Upload**.
+3. In `Tools` -> `Board` -> `Boards Manager`, install **esp32** by Espressif, version **3.0.0 or newer**.
+4. Open `esp32_firmware/esp32_c6_pedometer/esp32_c6_pedometer.ino`.
+5. In the `Tools` menu set:
+   - **Board**: `ESP32C6 Dev Module`
+   - **USB CDC On Boot**: `Enabled`
+   - **Flash Size**: `4MB (32Mb)`
+   - **Port**: the COM port of your board
+6. Click **Upload**.
+
+The `src/` and `esp32_c6_pedometer/` trees are kept in sync: the first one is built by PlatformIO, the second one is the ready-to-open Arduino sketch.
 
 ---
 
-## 📲 Как выгружать шаги в Android
+## Getting the data into Android
 
-### Способ 1: Веб-панель Web Bluetooth (Без установки приложений!)
+### Option 1: Web Bluetooth panel (no app install)
 
-1. Откройте на Android-смартфоне браузер **Google Chrome**, **Samsung Internet** или **Edge**.
-2. Откройте файл `android_web_companion/index.html` (или запустите локальный сервер, либо загрузите файлы на GitHub Pages / любой хостинг).
-   > *Быстрый запуск на ПК для проверки:* выполните в консоли в папке `android_web_companion`:
+1. On Android, open **Google Chrome**, **Samsung Internet** or **Edge**.
+2. Open `android_web_companion/index.html` (serve it locally or publish it to GitHub Pages / any host).
+   > Quick local check on a PC, from the `android_web_companion` folder:
    > ```bash
    > npx serve .
-   > # или python -m http.server 8080
+   > # or: python -m http.server 8080
    > ```
-3. Нажмите кнопку **«Подключить шагомер (BLE)»**.
-4. В появившемся системном окне выберите устройство **`ESP32-C6-Pedometer`** и нажмите *Подключить*.
-5. После подключения вы увидите:
-   - Живой счетчик шагов в реальном времени.
-   - График распределения шагов по часам суток.
-   - Кнопку **«Выгрузить в CSV (Excel)»** — мгновенно сохраняет таблицу `.csv` в память смартфона.
-   - Кнопку **«Выгрузить JSON (Google Fit)»** — экспортирует стандартизированный файл для фитнес-сервисов.
-   - Кнопку **«Скопировать сводку»** — копирует красивый текстовый отчет.
-   - Пульт управления темпом и режимами симуляции.
+3. Press the connect button (the panel UI is in Russian).
+4. Pick **`ESP32-C6-Pedometer`** in the system device picker.
+5. The panel then shows live steps, the hourly chart, CSV / JSON export buttons, a copy-summary button and the remote-control section.
 
----
+### Option 2: Sports trackers (Strava, Wahoo, nRF Toolbox)
 
-### Способ 2: Подключение к спортивным трекерам (Strava, Wahoo, nRF Toolbox)
+Because the firmware implements the official **Bluetooth SIG Running Speed and Cadence (0x1814)** service:
 
-Поскольку прошивка реализует официальный стандарт **Bluetooth SIG Running Speed and Cadence (0x1814)**:
+1. Enable Bluetooth on Android.
+2. Open an app such as **Strava** or **Wahoo Fitness**.
+3. Go to *Record activity* -> *Sensors* -> *Search for running / footpod sensors*.
+4. Select **ESP32-C6-Pedometer**.
+5. The app receives speed, cadence and distance in real time.
 
-1. Включите Bluetooth на Android.
-2. Откройте приложение, например **Strava** или **Wahoo Fitness**.
-3. Перейдите в раздел *Запись активности* → *Датчики (Sensors)* → *Поиск датчиков бега / Footpod*.
-4. Выберите **ESP32-C6-Pedometer**.
-5. Приложение начнет в реальном времени получать скорость, темп (каденс) и пройденную дистанцию!
+### Option 3: Native Android app (`android_native_app/`)
 
----
+The Kotlin app reads live metrics and hourly history over BLE and uploads steps, distance and calories to **Google Fit** through **Health Connect** (the official Google Fit path on Android 14/15) with the **Google Fit History API** as a fallback.
 
-### Способ 3: Нативное приложение Android (`android_native_app/`) — Прямая выгрузка в Google Fit
-
-Нативное Android-приложение на Kotlin напрямую выгружает шаги, дистанцию и калории в **Google Fit** через встроенную в Android систему **Health Connect** (официальный механизм Google Fit для Android 14/15) и **Google Fit History API**:
-
-1. Откройте проект `android_native_app` в **Android Studio** или соберите APK командой:
+1. Open the `android_native_app` project in **Android Studio**, or build the APK:
    ```bash
    cd android_native_app
    ./gradlew assembleDebug
    ```
-2. Установите полученный APK на смартфон:
+   The project uses Gradle 8.9, Android Gradle Plugin 8.2.2, Kotlin 1.9.22, `compileSdk 34`, `minSdk 26`.
+2. Install the APK:
    ```bash
    adb install -r app/build/outputs/apk/debug/app-debug.apk
    ```
-3. Откройте приложение **ESP32 Pedometer Sync** на смартфоне.
-4. Нажмите **«Scan & Connect»** — приложение автоматически согласует MTU 512 байт, подпишется на Live-поток шагов и выгрузит почасовую историю.
-5. Нажмите кнопку **«Upload Steps to Google Fit»**:
-   - При первом запуске появится системное окно Health Connect с запросом разрешений на запись шагов, дистанции и калорий.
-   - Включите переключатель **«Allow all»** и нажмите **«Allow»**.
-   - Приложение запишет интервалы активности прямо в базу Health Connect, откуда данные мгновенно отображаются в **Google Fit**!
-6. Кнопка **«Share JSON»** позволяет экспортировать структурированный JSON-файл в любое стороннее приложение или облако.
+   On Windows you can also use `install_to_xiaomi.bat`, which calls `adb install` and launches the app. Edit the `ADB` and `APK` paths at the top of that file first.
+3. Open **ESP32 Pedometer Sync**. The app mixes English labels with Russian section headers and status text; the ESP32 control block (`Walk` / `Jog` / `Pause` / `+1000`) is on the same screen.
+4. Press **Scan & Connect**: the app negotiates a 512-byte MTU, subscribes to the live step stream and pulls the hourly history.
+5. Press **Upload Steps to Google Fit**: on first run Health Connect asks for write permissions for steps, distance and calories; grant them and the activity intervals are written to Health Connect, where Google Fit picks them up.
+6. **Share JSON** exports the structured JSON payload to any other app or cloud storage.
+
+#### Using the GPS route emulation
+
+1. Enable developer options on the phone and set the pedometer app as the **mock location app** (`Settings` -> `Developer options` -> `Select mock location app`); the app has a button that opens these settings directly.
+2. Pick a preset route, or tap the map to draw your own and save it under a name.
+3. Press the GPS toggle to start emulation. A test GPS provider is registered and mock locations are injected at 1 Hz along the route, looping when the route ends.
+4. While connected, the app forwards each position to the ESP32, which displays the `GPS` badge, the coordinates or route name, and keeps speed in sync with the device mode.
 
 ---
 
-## 📡 Протокол управления BLE (GATT Services & Characteristics)
+## BLE control protocol
 
-### 1. Сервис синхронизации шагов (Custom UUID: `6e400001-...`)
+### 1. Step sync service (custom UUID base `6e400001-...`)
 
-| Characteristic | UUID | Свойства | Назначение |
+| Characteristic | UUID | Properties | Purpose |
 | :--- | :--- | :--- | :--- |
-| **Live Stats** | `6e400002-...` | Read, Notify | JSON с текущими метриками (`steps`, `cadence`, `dist`, `kcal`, `speed`, `mode`) |
-| **History Sync** | `6e400003-...` | Read, Notify | Массив шагов за 24 часа и 7 дней |
-| **Command** | `6e400004-...` | Write | Прием команд управления от Android |
+| **Live Stats** | `6e400002-b5a3-f393-e0a9-e50e24dcca9e` | Read, Notify | JSON with current metrics |
+| **History Sync** | `6e400003-b5a3-f393-e0a9-e50e24dcca9e` | Read, Notify | 24-hour and 7-day step arrays |
+| **Command** | `6e400004-b5a3-f393-e0a9-e50e24dcca9e` | Write | Remote control commands |
 
-#### Поддерживаемые команды управления (отправляются в `6e400004-...`):
-- `PAUSE` — остановить генерацию шагов.
-- `WALK` / `RESUME` — включить режим ходьбы (100 SPM).
-- `JOG` — включить режим трусцы (135 SPM).
-- `RUN` — включить режим быстрого бега (165 SPM).
-- `CYCLE` — циклически переключить следующий режим.
-- `CAD:<num>` — задать произвольный темп (например, `CAD:140`).
-- `ADD:<num>` — добавить N шагов (например, `ADD:1000`).
-- `SET:<num>` — установить точное значение шагов (например, `SET:8500`).
-- `GOAL:<num>` — установить дневную цель (например, `GOAL:12000`).
-- `RESET` — обнулить дневные показатели.
-- `REQ_HIST` — запросить выгрузку почасовой истории.
-- `TIME_HR:<0-23>` — установить текущий локальный час для точной раскладки шагов.
-- `TIME:<unix_timestamp>` — синхронизировать часы устройства.
+Live stats payload example:
 
-### 2. Стандартные сервисы Bluetooth SIG:
-- `0x1814` — Running Speed and Cadence Service (`0x2A53` RSC Measurement, `0x2A54` Feature).
-- `0x180F` — Battery Service (`0x2A19` Battery Level %).
-- `0x180A` — Device Information Service.
+```json
+{"steps":12345,"cadence":102,"speed":4.6,"dist":9.26,"kcal":421.3,"sec":7400,"goal":10000,"goal_sec":1800,"sess_sec":900,"mode":"WALK","lat":55.731456,"lon":37.603416,"gps":true,"route":"Gorky Park"}
+```
+
+Fields: `sec` is the total active time, `sess_sec` the time in motion of the current session, `goal_sec` the movement-time target in seconds (`0` means unlimited), and `lat` / `lon` / `gps` / `route` carry the position and route name pushed from the phone.
+
+#### Supported commands (written to `6e400004-...`)
+
+- `PAUSE` - stop generating steps.
+- `WALK` / `RESUME` - walking mode (100 spm).
+- `JOG` - jogging mode (135 spm).
+- `RUN` - running mode (165 spm).
+- `CYCLE` - switch to the next mode.
+- `CAD:<num>` (alias `CADENCE:`) - set a custom cadence, e.g. `CAD:140`.
+- `ADD:<num>` (alias `ADD_STEPS:`) - add N steps, e.g. `ADD:1000`.
+- `SET:<num>` (alias `SET_STEPS:`) - set the exact step value, e.g. `SET:8500`.
+- `GOAL:<num>` (aliases `SET_GOAL:`, `TARGET_STEPS:`) - set the step goal, e.g. `GOAL:12000`.
+- `TARGET_TIME:<seconds>` (aliases `GOAL_TIME:`, `TIME_GOAL:`) - set the movement-time target.
+- `CLEAR_GOAL` / `RESET_TARGETS` - clear both targets.
+- `GPS:<lat>,<lon>` - update the displayed position.
+- `ROUTE:<name>` - set the displayed route name.
+- `RESET` - clear daily statistics.
+- `REQ_HIST` (alias `GET_HISTORY`) - request the hourly history dump.
+- `TIME_HR:<0-23>` - set the current local hour for correct hourly bucketing.
+- `TIME:<unix_timestamp>` - synchronize the device clock.
+
+### 2. Standard Bluetooth SIG services
+
+- `0x1814` - Running Speed and Cadence Service (`0x2A53` RSC Measurement, `0x2A54` RSC Feature).
+- `0x180F` - Battery Service (`0x2A19` Battery Level %).
+- `0x180A` - Device Information Service (manufacturer, model, firmware revision `1.0.0`).
 
 ---
 
-## 📂 Структура репозитория
+## Repository layout
 
 ```
-Mercury/
+ESP32-C6-pedometer-/
 ├── esp32_firmware/
-│   ├── platformio.ini              # Конфигурация сборки PlatformIO
+│   ├── platformio.ini              # PlatformIO build configuration
+│   ├── default.csv                 # Partition table
 │   ├── src/
-│   │   ├── config.h                # Конфигурация пинов и настроек Waveshare
-│   │   ├── pedometer_engine.h/.cpp # Логика шагомера, расчет метрик, NVS Flash
-│   │   ├── display_driver.h/.cpp   # ST7789 172x320 SPI драйвер и спортивный UI
-│   │   ├── rgb_led.h/.cpp          # Управление WS2812 RGB LED на GPIO 8
-│   │   ├── button_handler.h/.cpp   # Обработка кликов и удержаний кнопки BOOT (GPIO 9)
-│   │   ├── ble_pedometer_service.h/.cpp # BLE сервер (RSC 0x1814 + Custom Sync)
-│   │   └── main.cpp                # Главный цикл прошивки
-│   └── esp32_c6_pedometer/         # Готовый скетч для Arduino IDE 2.x
+│   │   ├── config.h                # Pins, UUIDs and tunable defaults
+│   │   ├── pedometer_engine.h/.cpp # Step logic, metric math, targets, NVS flash
+│   │   ├── display_driver.h/.cpp   # ST7789 172x320 SPI driver and dashboard UI
+│   │   ├── rgb_led.h/.cpp          # WS2812 RGB LED on GPIO 8
+│   │   ├── button_handler.h/.cpp   # BOOT button clicks and holds (GPIO 9)
+│   │   ├── ble_pedometer_service.h/.cpp # BLE server (RSC 0x1814 + custom sync)
+│   │   └── main.cpp                # Main firmware loop
+│   └── esp32_c6_pedometer/         # Same sources as a ready Arduino IDE sketch
 │       ├── esp32_c6_pedometer.ino
 │       └── ...
 ├── android_web_companion/
-│   ├── index.html                  # Веб-панель для Android Chrome (Web Bluetooth)
-│   ├── app.js                      # BLE логика, живые графики и экспорт CSV/JSON
-│   └── styles.css                  # Адаптивный темный фитнес-дизайн
-├── android_native_app/             # Нативный проект для Android Studio (Kotlin)
+│   ├── index.html                  # Web Bluetooth panel for Android browsers
+│   ├── app.js                      # BLE logic, live charts, CSV / JSON export
+│   └── styles.css                  # Responsive dark fitness theme
+├── android_native_app/             # Native Android Studio project (Kotlin)
 │   ├── app/src/main/java/com/pedometer/companion/
-│   └── ...
-└── README.md                       # Документация и руководство
+│   │   ├── MainActivity.kt         # Dashboard, targets, route and map screens
+│   │   ├── BleManager.kt           # BLE client, live metrics and history parsing
+│   │   ├── GpsEmulatorManager.kt   # Mock-location provider and route playback
+│   │   ├── RouteManager.kt         # Route math, presets and saved routes
+│   │   ├── StepDataModel.kt        # Live metrics / history models
+│   │   └── GoogleFitSyncManager.kt # Health Connect and Google Fit upload
+│   └── app/src/main/assets/map.html # Leaflet route map screen
+├── install_to_xiaomi.bat           # adb install helper for the debug APK
+└── README.md                       # This documentation
 ```
+
+---
+
+## Notes
+
+- Mock locations require developer options; without a mock location app selected, route emulation reports a permission error instead of starting.
+- The native app mixes English labels with Russian section headers, and the web panel is Russian throughout; the firmware interface is English.
+- Route presets are Moscow-area loops used for demonstration; replace them in `RouteManager.getPresetRoutes()` with your own coordinates.
