@@ -1,5 +1,11 @@
 # ESP32-C6 Pedometer Firmware for Waveshare ESP32-C6-LCD-1.47
 
+<p align="center">
+  <a href="https://github.com/M0nteCarl0/ESP32-C6-pedometer-/actions/workflows/build.yml"><img src="https://github.com/M0nteCarl0/ESP32-C6-pedometer-/actions/workflows/build.yml/badge.svg" alt="Build status"></a>
+  <a href="https://github.com/M0nteCarl0/ESP32-C6-pedometer-/releases/latest"><img src="https://img.shields.io/github/v/release/M0nteCarl0/ESP32-C6-pedometer-?label=release" alt="Latest release"></a>
+  <a href="https://github.com/M0nteCarl0/ESP32-C6-pedometer-/releases"><img src="https://img.shields.io/github/downloads/M0nteCarl0/ESP32-C6-pedometer-/total?label=downloads" alt="Release downloads"></a>
+</p>
+
 A complete smart step-counter / fitness-tracker firmware for the [**Waveshare ESP32-C6-LCD-1.47**](https://www.waveshare.com/esp32-c6-lcd-1.47.htm) board (1.47" color IPS display, ST7789 172x320), with an addressable WS2812 RGB LED, NVS flash persistence, a Bluetooth LE **Running Speed and Cadence (RSC)** profile, a browser-based companion panel, and a native Android app with GPS route emulation.
 
 <p align="center">
@@ -82,6 +88,8 @@ A complete smart step-counter / fitness-tracker firmware for the [**Waveshare ES
 ---
 
 ## Build and flash
+
+Prebuilt binaries are attached to every release: `esp32-c6-pedometer-factory.bin` (a single image to flash at offset `0x0`, for example with the Espressif Flash Download Tool or `esptool`), `esp32-c6-pedometer-firmware.bin` (application image for OTA updates) and `esp32-pedometer-sync-debug.apk`. The `Build` GitHub Actions workflow produces them on every push and publishes them when a `v*` tag is pushed.
 
 ### Option A: PlatformIO (VS Code) - recommended
 
