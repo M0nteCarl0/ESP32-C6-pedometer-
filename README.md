@@ -1,6 +1,13 @@
 # ESP32-C6 Pedometer Firmware for Waveshare ESP32-C6-LCD-1.47
 
-A complete smart step-counter / fitness-tracker firmware for the **Waveshare ESP32-C6-LCD-1.47** board (1.47" color IPS display, ST7789 172x320), with an addressable WS2812 RGB LED, NVS flash persistence, a Bluetooth LE **Running Speed and Cadence (RSC)** profile, a browser-based companion panel, and a native Android app with GPS route emulation.
+A complete smart step-counter / fitness-tracker firmware for the [**Waveshare ESP32-C6-LCD-1.47**](https://www.waveshare.com/esp32-c6-lcd-1.47.htm) board (1.47" color IPS display, ST7789 172x320), with an addressable WS2812 RGB LED, NVS flash persistence, a Bluetooth LE **Running Speed and Cadence (RSC)** profile, a browser-based companion panel, and a native Android app with GPS route emulation.
+
+<p align="center">
+  <a href="https://www.waveshare.com/esp32-c6-lcd-1.47.htm"><img src="https://www.waveshare.com/img/devkit/ESP32-C6-LCD-1.47/ESP32-C6-LCD-1.47-3.jpg" alt="Waveshare ESP32-C6-LCD-1.47 module" width="45%"></a>
+  <a href="https://www.waveshare.com/esp32-c6-lcd-1.47.htm"><img src="https://www.waveshare.com/img/devkit/ESP32-C6-LCD-1.47/ESP32-C6-LCD-1.47-1.jpg" alt="Waveshare ESP32-C6-LCD-1.47 module with the LCD powered on" width="45%"></a>
+</p>
+
+<p align="center">Hardware: <a href="https://www.waveshare.com/esp32-c6-lcd-1.47.htm">Waveshare ESP32-C6-LCD-1.47 product page</a>. Module photos are hosted by Waveshare.</p>
 
 ---
 
