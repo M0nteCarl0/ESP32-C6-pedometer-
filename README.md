@@ -3,7 +3,7 @@
 <p align="center">
   <a href="https://github.com/M0nteCarl0/ESP32-C6-pedometer-/actions/workflows/build.yml"><img src="https://github.com/M0nteCarl0/ESP32-C6-pedometer-/actions/workflows/build.yml/badge.svg" alt="Build status"></a>
   <a href="https://github.com/M0nteCarl0/ESP32-C6-pedometer-/releases/latest"><img src="https://img.shields.io/github/v/release/M0nteCarl0/ESP32-C6-pedometer-?label=release" alt="Latest release"></a>
-  <a href="https://github.com/M0nteCarl0/ESP32-C6-pedometer-/releases"><img src="https://img.shields.io/github/downloads/M0nteCarl0/ESP32-C6-pedometer-/total?label=downloads" alt="Release downloads"></a>
+  <a href="https://github.com/M0nteCarl0/ESP32-C6-pedometer-/releases"><img src="https://img.shields.io/github/release-date/M0nteCarl0/ESP32-C6-pedometer-?label=released" alt="Release date"></a>
 </p>
 
 A complete smart step-counter / fitness-tracker firmware for the [**Waveshare ESP32-C6-LCD-1.47**](https://www.waveshare.com/esp32-c6-lcd-1.47.htm) board (1.47" color IPS display, ST7789 172x320), with an addressable WS2812 RGB LED, NVS flash persistence, a Bluetooth LE **Running Speed and Cadence (RSC)** profile, a browser-based companion panel, and a native Android app with GPS route emulation.
