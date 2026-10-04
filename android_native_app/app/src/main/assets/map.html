@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>ESP32 GPS Route Map</title>
+    <!-- Leaflet CSS & JS from CDN with robust fallback -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        html, body, #map {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            background: #0d1117;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        .map-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: rgba(13, 17, 23, 0.9);
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 8px 12px;
+            color: #e6edf3;
+            font-size: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            pointer-events: auto;
+            max-width: 80%;
+        }
+        .map-overlay h4 {
+            margin: 0 0 4px 0;
+            font-size: 13px;
+            color: #58a6ff;
+        }
+        .map-btn-bar {
+            position: absolute;
+            bottom: 15px;
+            left: 10px;
+            right: 10px;
+            z-index: 1000;
+            display: flex;
+            gap: 6px;
+            justify-content: center;
+        }
+        .map-btn {
+            background: #21262d;
+            color: #c9d1d9;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .map-btn.primary {
+            background: #238636;
+            color: #ffffff;
+            border-color: #2ea043;
+        }
+        .runner-icon {
+            font-size: 24px;
+            text-align: center;
+            line-height: 24px;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="map-overlay" id="overlay">
+        <h4>🗺️ Маршрут для GPS Эмуляции</h4>
+        <div id="routeInfo">Кликните на карту для добавления точек</div>
+    </div>
+    <div class="map-btn-bar">
+        <button class="map-btn" onclick="clearMapRoute()">Очистить</button>
+        <button class="map-btn" onclick="fitRouteBounds()">Центрировать</button>
+        <button class="map-btn primary" onclick="sendRouteToApp()">Применить маршрут</button>
+    </div>
+
+    <script>
+        var map;
+        var waypoints = []; // [{lat, lng}, ...]
+        var markers = [];
+        var routeLine = null;
+        var runnerMarker = null;
+
+        function initMap() {
+            // Base layer: OpenStreetMap
+            var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenStreetMap'
+            });
+
+            // Google Maps Roadmap
+            var googleRoadmap = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+                maxZoom: 20,
+                attribution: '© Google Maps'
+            });
+
+            // Google Maps Satellite / Hybrid
+            var googleSatellite = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+                maxZoom: 20,
+                attribution: '© Google Maps Satellite'
+            });
+
+            // Default center: Moscow (or will be set to current location)
+            map = L.map('map', {
+                center: [55.7558, 37.6173],
+                zoom: 14,
+                layers: [googleRoadmap]
+            });
+
+            var baseMaps = {
+                "Google Maps": googleRoadmap,
+                "Google Спутник": googleSatellite,
+                "OpenStreetMap": osmLayer
+            };
+
+            L.control.layers(baseMaps).addTo(map);
+
+            // Click listener to add route points
+            map.on('click', function(e) {
+                addWaypoint(e.latlng.lat, e.latlng.lng);
+            });
+        }
+
+        function addWaypoint(lat, lng) {
+            var pt = { lat: parseFloat(lat.toFixed(6)), lng: parseFloat(lng.toFixed(6)) };
+            waypoints.push(pt);
+
+            var idx = waypoints.length;
+            var marker = L.circleMarker([pt.lat, pt.lng], {
+                radius: 7,
+                fillColor: idx === 1 ? "#238636" : "#1f6feb",
+                color: "#ffffff",
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 0.9
+            }).addTo(map);
+
+            marker.bindPopup("Точка #" + idx + "<br>" + pt.lat + ", " + pt.lng);
+            markers.push(marker);
+
+            redrawPolyline();
+            notifyApp();
+        }
+
+        function redrawPolyline() {
+            if (routeLine) {
+                map.removeLayer(routeLine);
+                routeLine = null;
+            }
+
+            if (waypoints.length >= 2) {
+                var latlngs = waypoints.map(function(p) { return [p.lat, p.lng]; });
+                routeLine = L.polyline(latlngs, {
+                    color: '#00FFA3',
+                    weight: 5,
+                    opacity: 0.85,
+                    smoothFactor: 1
+                }).addTo(map);
+            }
+
+            updateInfoBox();
+        }
+
+        function calculateTotalDistanceMeters() {
+            if (waypoints.length < 2) return 0;
+            var total = 0;
+            for (var i = 0; i < waypoints.length - 1; i++) {
+                var p1 = L.latLng(waypoints[i].lat, waypoints[i].lng);
+                var p2 = L.latLng(waypoints[i+1].lat, waypoints[i+1].lng);
+                total += p1.distanceTo(p2);
+            }
+            return total;
+        }
+
+        function updateInfoBox() {
+            var distMeters = calculateTotalDistanceMeters();
+            var distKm = (distMeters / 1000.0).toFixed(2);
+            var el = document.getElementById('routeInfo');
+            if (waypoints.length === 0) {
+                el.innerHTML = "Кликните на карту для добавления точек";
+            } else {
+                el.innerHTML = "Точек: <b>" + waypoints.length + "</b> | Дистанция: <b>" + distKm + " км</b> (" + Math.round(distMeters) + " м)";
+            }
+        }
+
+        function setRoutePoints(pointsJsonStr) {
+            clearMapRoute();
+            try {
+                var pts = JSON.parse(pointsJsonStr);
+                if (Array.isArray(pts)) {
+                    pts.forEach(function(p) {
+                        addWaypoint(p.lat, p.lng);
+                    });
+                    fitRouteBounds();
+                }
+            } catch(e) {
+                console.error("setRoutePoints error", e);
+            }
+        }
+
+        function clearMapRoute() {
+            waypoints = [];
+            markers.forEach(function(m) { map.removeLayer(m); });
+            markers = [];
+            if (routeLine) {
+                map.removeLayer(routeLine);
+                routeLine = null;
+            }
+            updateInfoBox();
+            notifyApp();
+        }
+
+        function fitRouteBounds() {
+            if (waypoints.length > 0) {
+                var latlngs = waypoints.map(function(p) { return [p.lat, p.lng]; });
+                var bounds = L.latLngBounds(latlngs);
+                map.fitBounds(bounds, { padding: [40, 40] });
+            }
+        }
+
+        function updateRunnerPosition(lat, lng, bearing) {
+            var pos = [lat, lng];
+            if (!runnerMarker) {
+                var icon = L.divIcon({
+                    className: 'runner-icon',
+                    html: '🏃',
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 12]
+                });
+                runnerMarker = L.marker(pos, { icon: icon, zIndexOffset: 1000 }).addTo(map);
+            } else {
+                runnerMarker.setLatLng(pos);
+            }
+        }
+
+        function removeRunnerPosition() {
+            if (runnerMarker) {
+                map.removeLayer(runnerMarker);
+                runnerMarker = null;
+            }
+        }
+
+        function sendRouteToApp() {
+            notifyApp();
+            if (window.AndroidBridge && typeof window.AndroidBridge.onApplyClicked === 'function') {
+                window.AndroidBridge.onApplyClicked();
+            }
+        }
+
+        function notifyApp() {
+            var dist = calculateTotalDistanceMeters();
+            var json = JSON.stringify(waypoints);
+            if (window.AndroidBridge && typeof window.AndroidBridge.onRouteChanged === 'function') {
+                window.AndroidBridge.onRouteChanged(json, dist);
+            }
+        }
+
+        window.onload = function() {
+            initMap();
+        };
+    </script>
+</body>
+</html>

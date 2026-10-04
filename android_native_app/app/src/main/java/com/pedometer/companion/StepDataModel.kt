@@ -8,7 +8,13 @@ data class StepMetrics(
     val caloriesKcal: Float = 0f,
     val activeSeconds: Long = 0,
     val targetGoal: Long = 10000,
-    val mode: String = "PAUSED"
+    val targetDurationSec: Long = 0,
+    val sessionActiveSec: Long = 0,
+    val mode: String = "PAUSED",
+    val lat: Double = 0.0,
+    val lon: Double = 0.0,
+    val hasGps: Boolean = false,
+    val routeName: String = ""
 )
 
 data class HourlyHistory(

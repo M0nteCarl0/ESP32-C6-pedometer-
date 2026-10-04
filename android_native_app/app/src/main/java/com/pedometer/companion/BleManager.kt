@@ -305,7 +305,13 @@ class BleManager(private val context: Context) {
                         caloriesKcal = json.optDouble("kcal", 0.0).toFloat(),
                         activeSeconds = json.optLong("sec", 0),
                         targetGoal = json.optLong("goal", 10000),
-                        mode = json.optString("mode", "PAUSED")
+                        targetDurationSec = json.optLong("goal_sec", 0),
+                        sessionActiveSec = json.optLong("sess_sec", 0),
+                        mode = json.optString("mode", "PAUSED"),
+                        lat = json.optDouble("lat", 0.0),
+                        lon = json.optDouble("lon", 0.0),
+                        hasGps = json.optBoolean("gps", false),
+                        routeName = json.optString("route", "")
                     )
                     mainHandler.post { listener?.onLiveMetricsReceived(metrics) }
                 } catch (e: Exception) {
@@ -366,6 +372,12 @@ class BleManager(private val context: Context) {
     fun setMode(mode: String) = sendCommand(mode.uppercase())
     fun addSteps(count: Int) = sendCommand("ADD:$count")
     fun setGoal(goal: Int) = sendCommand("GOAL:$goal")
+    fun setTargetGoal(goal: Long) = sendCommand("TARGET_STEPS:$goal")
+    fun setTargetDuration(seconds: Long) = sendCommand("TARGET_TIME:$seconds")
+    fun clearTargets() = sendCommand("RESET_TARGETS")
+    fun sendGpsCoordinates(lat: Double, lon: Double) =
+        sendCommand(String.format(java.util.Locale.US, "GPS:%.6f,%.6f", lat, lon))
+    fun sendRouteName(name: String) = sendCommand("ROUTE:$name")
     fun resetStats() = sendCommand("RESET")
     fun syncTime() {
         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)

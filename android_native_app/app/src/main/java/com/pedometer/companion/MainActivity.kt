@@ -1,12 +1,21 @@
 package com.pedometer.companion
 
 import android.Manifest
+import android.annotation.SuppressLint
+import android.app.AlertDialog
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.text.method.ScrollingMovementMethod
 import android.util.Log
+import android.webkit.JavascriptInterface
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.Button
+import android.widget.EditText
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -15,11 +24,12 @@ import androidx.core.content.ContextCompat
 import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
+import org.json.JSONArray
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class MainActivity : ComponentActivity(), BleManager.BleEventListener {
+class MainActivity : ComponentActivity(), BleManager.BleEventListener, GpsEmulatorManager.GpsEmulatorListener {
 
     companion object {
         const val TAG = "MainActivity"
@@ -27,8 +37,10 @@ class MainActivity : ComponentActivity(), BleManager.BleEventListener {
 
     private lateinit var bleManager: BleManager
     private lateinit var googleFitSyncManager: GoogleFitSyncManager
+    private lateinit var routeManager: RouteManager
+    private lateinit var gpsEmulatorManager: GpsEmulatorManager
 
-    // UI Elements
+    // UI Elements - Metrics & Connection
     private lateinit var tvSteps: TextView
     private lateinit var tvDist: TextView
     private lateinit var tvKcal: TextView
@@ -44,25 +56,44 @@ class MainActivity : ComponentActivity(), BleManager.BleEventListener {
     private lateinit var btnSyncHistory: Button
     private lateinit var btnExportJson: Button
 
-    // Cached Metrics
+    // UI Elements - Targets (Steps & Duration)
+    private lateinit var etTargetSteps: EditText
+    private lateinit var etTargetDurationMin: EditText
+    private lateinit var btnSetTargets: Button
+    private lateinit var btnClearTargets: Button
+    private lateinit var tvTargetStatus: TextView
+    private lateinit var pbStepsTarget: ProgressBar
+
+    // UI Elements - Google Maps & GPS Emulation
+    private lateinit var tvRouteInfo: TextView
+    private lateinit var webViewMap: WebView
+    private lateinit var btnPresetRoutes: Button
+    private lateinit var btnSaveRoute: Button
+    private lateinit var btnLoadRoute: Button
+    private lateinit var btnToggleGps: Button
+    private lateinit var tvGpsStatus: TextView
+    private lateinit var btnOpenDevSettings: Button
+
+    // State
     private var lastMetrics = StepMetrics()
     private var lastHistory = HourlyHistory()
+    private var currentRoutePoints = mutableListOf<RoutePoint>()
+    private var currentRouteName = "Пользовательский маршрут"
+    private var currentRouteDistanceMeters = 0.0
 
-    // Activity Result Launcher for Bluetooth Permissions
-    private val btPermissionLauncher = registerForActivityResult(
+    // Permissions launcher
+    private val appPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        val allGranted = permissions.entries.all { it.value }
-        if (allGranted) {
-            logToConsole("Bluetooth permissions granted! Starting scan...")
+        val btGranted = permissions.entries.filter { it.key.contains("BLUETOOTH") }.all { it.value }
+        if (btGranted) {
+            logToConsole("Bluetooth permissions granted! Scanning...")
             bleManager.startScan()
         } else {
-            logToConsole("Error: Bluetooth permissions denied by user.")
-            Toast.makeText(this, "Bluetooth permissions required to connect to ESP32", Toast.LENGTH_LONG).show()
+            logToConsole("Bluetooth permissions not fully granted.")
         }
     }
 
-    // Activity Result Launcher for Health Connect Permissions
     private val healthPermissionLauncher = registerForActivityResult(
         PermissionController.createRequestPermissionResultContract()
     ) { grantedPermissions ->
@@ -70,8 +101,8 @@ class MainActivity : ComponentActivity(), BleManager.BleEventListener {
             logToConsole("Health Connect permissions granted! Uploading data...")
             performHealthConnectUpload()
         } else {
-            logToConsole("Health Connect permissions partially or not granted: $grantedPermissions")
-            Toast.makeText(this, "Health Connect permissions required to upload to Google Fit", Toast.LENGTH_LONG).show()
+            logToConsole("Health Connect permissions denied or partial: $grantedPermissions")
+            Toast.makeText(this, "Health Connect permissions required for Google Fit", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -82,16 +113,21 @@ class MainActivity : ComponentActivity(), BleManager.BleEventListener {
         bleManager = BleManager(this)
         bleManager.listener = this
         googleFitSyncManager = GoogleFitSyncManager(this)
+        routeManager = RouteManager(this)
+        gpsEmulatorManager = GpsEmulatorManager(this, bleManager)
+        gpsEmulatorManager.listener = this
 
         initViews()
         setupListeners()
+        setupWebViewMap()
 
-        logToConsole("Companion App started. Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+        logToConsole("Mercury App started. Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
         val hcStatus = if (googleFitSyncManager.isHealthConnectAvailable()) "Available (Ready)" else "Not available on this device"
         logToConsole("Health Connect: $hcStatus")
     }
 
     private fun initViews() {
+        // Core metrics
         tvSteps = findViewById(R.id.tvSteps)
         tvDist = findViewById(R.id.tvDist)
         tvKcal = findViewById(R.id.tvKcal)
@@ -107,6 +143,24 @@ class MainActivity : ComponentActivity(), BleManager.BleEventListener {
         btnUploadGoogleFit = findViewById(R.id.btnUploadGoogleFit)
         btnSyncHistory = findViewById(R.id.btnSyncHistory)
         btnExportJson = findViewById(R.id.btnExportJson)
+
+        // Target Settings
+        etTargetSteps = findViewById(R.id.etTargetSteps)
+        etTargetDurationMin = findViewById(R.id.etTargetDurationMin)
+        btnSetTargets = findViewById(R.id.btnSetTargets)
+        btnClearTargets = findViewById(R.id.btnClearTargets)
+        tvTargetStatus = findViewById(R.id.tvTargetStatus)
+        pbStepsTarget = findViewById(R.id.pbStepsTarget)
+
+        // Google Maps & GPS
+        tvRouteInfo = findViewById(R.id.tvRouteInfo)
+        webViewMap = findViewById(R.id.webViewMap)
+        btnPresetRoutes = findViewById(R.id.btnPresetRoutes)
+        btnSaveRoute = findViewById(R.id.btnSaveRoute)
+        btnLoadRoute = findViewById(R.id.btnLoadRoute)
+        btnToggleGps = findViewById(R.id.btnToggleGps)
+        tvGpsStatus = findViewById(R.id.tvGpsStatus)
+        btnOpenDevSettings = findViewById(R.id.btnOpenDevSettings)
     }
 
     private fun setupListeners() {
@@ -118,104 +172,253 @@ class MainActivity : ComponentActivity(), BleManager.BleEventListener {
             }
         }
 
-        btnUploadGoogleFit.setOnClickListener {
-            handleGoogleFitUpload()
-        }
-
+        btnUploadGoogleFit.setOnClickListener { handleGoogleFitUpload() }
         btnSyncHistory.setOnClickListener {
             if (bleManager.isConnected()) {
-                logToConsole("Requesting history dump from ESP32...")
+                logToConsole("Requesting history from ESP32...")
                 bleManager.requestHistory()
             } else {
                 Toast.makeText(this, "Connect to ESP32 first", Toast.LENGTH_SHORT).show()
             }
         }
-
         btnExportJson.setOnClickListener {
             googleFitSyncManager.shareGoogleFitExport(this, lastHistory, lastMetrics)
         }
 
+        // Hardware mode triggers
         findViewById<Button>(R.id.btnWalk).setOnClickListener { bleManager.setMode("WALK") }
         findViewById<Button>(R.id.btnJog).setOnClickListener { bleManager.setMode("JOG") }
         findViewById<Button>(R.id.btnPause).setOnClickListener { bleManager.setMode("PAUSE") }
         findViewById<Button>(R.id.btnAdd1000).setOnClickListener { bleManager.addSteps(1000) }
+
+        // Target Quick Buttons
+        findViewById<Button>(R.id.btnQuick5k).setOnClickListener { etTargetSteps.setText("5000") }
+        findViewById<Button>(R.id.btnQuick10k).setOnClickListener { etTargetSteps.setText("10000") }
+        findViewById<Button>(R.id.btnQuick15k).setOnClickListener { etTargetSteps.setText("15000") }
+
+        findViewById<Button>(R.id.btnQuick15m).setOnClickListener { etTargetDurationMin.setText("15") }
+        findViewById<Button>(R.id.btnQuick30m).setOnClickListener { etTargetDurationMin.setText("30") }
+        findViewById<Button>(R.id.btnQuick60m).setOnClickListener { etTargetDurationMin.setText("60") }
+
+        btnSetTargets.setOnClickListener { applyTargets() }
+        btnClearTargets.setOnClickListener { clearTargets() }
+
+        // Route & GPS
+        btnPresetRoutes.setOnClickListener { showPresetRoutesDialog() }
+        btnSaveRoute.setOnClickListener { showSaveRouteDialog() }
+        btnLoadRoute.setOnClickListener { showLoadSavedRoutesDialog() }
+
+        btnToggleGps.setOnClickListener {
+            if (gpsEmulatorManager.isRunning()) {
+                gpsEmulatorManager.stopEmulation()
+            } else {
+                if (currentRoutePoints.isEmpty()) {
+                    Toast.makeText(this, "Сначала выберите или нарисуйте маршрут на карте", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                gpsEmulatorManager.startEmulation(currentRoutePoints, currentRouteName)
+            }
+        }
+
+        btnOpenDevSettings.setOnClickListener {
+            try {
+                startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
+            } catch (e: Exception) {
+                Toast.makeText(this, "Откройте: Настройки -> Для разработчиков -> Выбрать фиктивные местоположения", Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
-    private fun checkPermissionsAndScan() {
-        val permissions = mutableListOf<String>()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            permissions.add(Manifest.permission.BLUETOOTH_SCAN)
-            permissions.add(Manifest.permission.BLUETOOTH_CONNECT)
-        } else {
-            permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
-            permissions.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun setupWebViewMap() {
+        webViewMap.settings.javaScriptEnabled = true
+        webViewMap.settings.domStorageEnabled = true
+        webViewMap.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                logToConsole("Карта Google Maps / Leaflet загружена")
+                // Load default preset if empty
+                val presets = RouteManager.getPresetRoutes()
+                if (presets.isNotEmpty() && currentRoutePoints.isEmpty()) {
+                    loadPresetRoute(presets[0])
+                }
+            }
         }
 
-        val needed = permissions.filter {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-        }
+        // Bridge to receive route waypoints from JavaScript map
+        webViewMap.addJavascriptInterface(object {
+            @JavascriptInterface
+            fun onRouteChanged(jsonStr: String, distMeters: Double) {
+                runOnUiThread {
+                    currentRouteDistanceMeters = distMeters
+                    currentRoutePoints.clear()
+                    try {
+                        val arr = JSONArray(jsonStr)
+                        for (i in 0 until arr.length()) {
+                            val obj = arr.getJSONObject(i)
+                            currentRoutePoints.add(RoutePoint(obj.getDouble("lat"), obj.getDouble("lng")))
+                        }
+                        val distKm = String.format(Locale.US, "%.2f", distMeters / 1000.0)
+                        tvRouteInfo.text = "Маршрут: $currentRouteName | Точек: ${currentRoutePoints.size} | $distKm км"
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error parsing route from map", e)
+                    }
+                }
+            }
 
-        if (needed.isNotEmpty()) {
-            btPermissionLauncher.launch(needed.toTypedArray())
-        } else {
-            bleManager.startScan()
-        }
+            @JavascriptInterface
+            fun onApplyClicked() {
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, "Маршрут применен (${currentRoutePoints.size} точек)", Toast.LENGTH_SHORT).show()
+                    logToConsole("Маршрут готов к GPS эмуляции: ${currentRoutePoints.size} точек")
+                }
+            }
+        }, "AndroidBridge")
+
+        webViewMap.loadUrl("file:///android_asset/map.html")
     }
 
-    private fun handleGoogleFitUpload() {
-        val totalSteps = if (lastHistory.total > 0) lastHistory.total else lastMetrics.steps
-        if (totalSteps == 0L) {
-            Toast.makeText(this, "No steps to upload (0 steps recorded)", Toast.LENGTH_SHORT).show()
-            logToConsole("Upload aborted: 0 steps.")
+    private fun applyTargets() {
+        val stepsStr = etTargetSteps.text.toString().trim()
+        val minStr = etTargetDurationMin.text.toString().trim()
+
+        val steps = stepsStr.toLongOrNull() ?: 10000L
+        val mins = minStr.toLongOrNull() ?: 30L
+        val seconds = mins * 60L
+
+        bleManager.setTargetGoal(steps)
+        bleManager.setTargetDuration(seconds)
+
+        val msg = "Цели установлены: $steps шагов | $mins мин ($seconds сек)"
+        logToConsole(msg)
+        tvTargetStatus.text = "Цели: $steps шагов | $mins мин движения"
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun clearTargets() {
+        bleManager.clearTargets()
+        tvTargetStatus.text = "Цели сброшены (без ограничений)"
+        logToConsole("Цели тренировки сброшены")
+        Toast.makeText(this, "Цели сброшены", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun showPresetRoutesDialog() {
+        val presets = RouteManager.getPresetRoutes()
+        val names = presets.map { "${it.name} (${String.format(Locale.US, "%.1f", it.distanceMeters / 1000.0)} км)" }.toTypedArray()
+
+        AlertDialog.Builder(this)
+            .setTitle("Выберите готовый маршрут")
+            .setItems(names) { _, which ->
+                loadPresetRoute(presets[which])
+            }
+            .setNegativeButton("Отмена", null)
+            .show()
+    }
+
+    private fun loadPresetRoute(route: SavedRoute) {
+        currentRouteName = route.name
+        currentRoutePoints = route.points.toMutableList()
+        currentRouteDistanceMeters = route.distanceMeters
+
+        val arr = JSONArray()
+        for (p in route.points) {
+            val obj = org.json.JSONObject()
+            obj.put("lat", p.lat)
+            obj.put("lng", p.lng)
+            arr.put(obj)
+        }
+        val jsonStr = arr.toString()
+        webViewMap.evaluateJavascript("setRoutePoints('$jsonStr')", null)
+
+        val distKm = String.format(Locale.US, "%.2f", route.distanceMeters / 1000.0)
+        tvRouteInfo.text = "Маршрут: ${route.name} | Точек: ${route.points.size} | $distKm км"
+        logToConsole("Загружен маршрут: ${route.name}")
+    }
+
+    private fun showSaveRouteDialog() {
+        if (currentRoutePoints.isEmpty()) {
+            Toast.makeText(this, "Маршрут пуст. Добавьте точки на карте.", Toast.LENGTH_SHORT).show()
             return
         }
 
-        lifecycleScope.launch {
-            if (googleFitSyncManager.isHealthConnectAvailable()) {
-                if (googleFitSyncManager.hasHealthConnectPermissions()) {
-                    performHealthConnectUpload()
-                } else {
-                    logToConsole("Requesting Health Connect permissions for Google Fit...")
-                    healthPermissionLauncher.launch(GoogleFitSyncManager.HEALTH_PERMISSIONS)
-                }
-            } else {
-                // Fallback to Google Fit Play Services API or share JSON
-                logToConsole("Health Connect not available. Attempting Google Fit API...")
-                if (googleFitSyncManager.hasGoogleFitApiPermission()) {
-                    googleFitSyncManager.uploadToGoogleFitApi(lastHistory, lastMetrics) { _, msg ->
-                        runOnUiThread {
-                            logToConsole("Google Fit API: $msg")
-                            Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
-                        }
-                    }
-                } else {
-                    googleFitSyncManager.requestGoogleFitPermission(this@MainActivity)
-                }
+        val input = EditText(this).apply {
+            hint = "Название маршрута"
+            setText("Маршрут ${SimpleDateFormat("dd.MM HH:mm", Locale.getDefault()).format(Date())}")
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Сохранить маршрут")
+            .setView(input)
+            .setPositiveButton("Сохранить") { _, _ ->
+                val name = input.text.toString().trim().ifEmpty { "Маршрут" }
+                val saved = routeManager.saveRoute(name, currentRoutePoints)
+                currentRouteName = saved.name
+                logToConsole("Маршрут '${saved.name}' сохранен")
+                Toast.makeText(this, "Маршрут '${saved.name}' сохранен!", Toast.LENGTH_SHORT).show()
             }
+            .setNegativeButton("Отмена", null)
+            .show()
+    }
+
+    private fun showLoadSavedRoutesDialog() {
+        val savedList = routeManager.loadSavedRoutes()
+        if (savedList.isEmpty()) {
+            Toast.makeText(this, "Нет сохраненных маршрутов. Сохраните маршрут с карты.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val items = savedList.map { "${it.name} (${String.format(Locale.US, "%.2f", it.distanceMeters / 1000.0)} км)" }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Сохраненные маршруты")
+            .setItems(items) { _, which ->
+                loadPresetRoute(savedList[which])
+            }
+            .setNegativeButton("Отмена", null)
+            .show()
+    }
+
+    // GpsEmulatorManager Callbacks
+    override fun onLocationUpdated(lat: Double, lng: Double, bearing: Float, speedKmh: Float, distanceTraveledMeters: Double) {
+        val distKm = String.format(Locale.US, "%.2f", distanceTraveledMeters / 1000.0)
+        val text = String.format(Locale.US, "GPS: %.5f, %.5f | %.1f км/ч | Пройдено: %s км", lat, lng, speedKmh, distKm)
+        tvGpsStatus.text = text
+        tvGpsStatus.setTextColor(0xFF00FFA3.toInt())
+
+        // Move runner icon on map
+        val js = String.format(Locale.US, "updateRunnerPosition(%.6f, %.6f, %.1f);", lat, lng, bearing)
+        webViewMap.evaluateJavascript(js, null)
+    }
+
+    override fun onEmulationStateChanged(isRunning: Boolean) {
+        btnToggleGps.text = if (isRunning) "⏹ Остановить GPS Эмуляцию" else "▶ Запустить GPS Эмуляцию"
+        btnToggleGps.backgroundTintList = android.content.res.ColorStateList.valueOf(
+            if (isRunning) 0xFFDC2626.toInt() else 0xFF22C55E.toInt()
+        )
+        if (!isRunning) {
+            tvGpsStatus.text = "GPS: Остановлен"
+            tvGpsStatus.setTextColor(0xFF94A3B8.toInt())
+            webViewMap.evaluateJavascript("removeRunnerPosition();", null)
         }
     }
 
-    private fun performHealthConnectUpload() {
-        lifecycleScope.launch {
-            logToConsole("Uploading to Health Connect (Google Fit)...")
-            btnUploadGoogleFit.isEnabled = false
-            val result = googleFitSyncManager.uploadToHealthConnect(lastHistory, lastMetrics)
-            btnUploadGoogleFit.isEnabled = true
-
-            result.onSuccess { recordCount ->
-                val totalSteps = if (lastHistory.total > 0) lastHistory.total else lastMetrics.steps
-                val msg = "Success! $recordCount records ($totalSteps steps) exported to Google Fit / Health Connect!"
-                logToConsole("OK: $msg")
-                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
-                tvHistoryStatus.text = "Last exported: $totalSteps steps to Google Fit"
-                tvHistoryStatus.setTextColor(0xFF00FFA3.toInt())
-            }.onFailure { err ->
-                val msg = "Health Connect upload error: ${err.message}"
-                logToConsole("ERROR: $msg")
-                Log.e(TAG, "Health Connect error", err)
-                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+    override fun onMockLocationPermissionNeeded() {
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Требуется разрешение на фиктивное местоположение")
+            .setMessage("Для эмуляции GPS на Android перейдите в:\n\n1. Настройки телефона -> 'Для разработчиков'\n2. Найдите пункт 'Выбрать приложение для фиктивных местоположений'\n3. Выберите 'ESP32 Pedometer Sync'.")
+            .setPositiveButton("Открыть настройки") { _, _ ->
+                try {
+                    startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
+                } catch (e: Exception) {
+                    Toast.makeText(this, "Не удалось открыть настройки автоматически", Toast.LENGTH_SHORT).show()
+                }
             }
-        }
+            .setNegativeButton("Позже", null)
+            .create()
+        dialog.show()
+    }
+
+    override fun onStatusMessage(msg: String) {
+        logToConsole(msg)
     }
 
     // BLE Callbacks
@@ -236,6 +439,23 @@ class MainActivity : ComponentActivity(), BleManager.BleEventListener {
         tvCadence.text = "${metrics.cadence} spm"
         tvSpeed.text = String.format(Locale.US, "%.1f km/h", metrics.speed)
         tvMode.text = "MODE: ${metrics.mode}"
+
+        // Update GPS speed from ESP32
+        gpsEmulatorManager.setSpeedFromEsp32(metrics.speed, metrics.mode)
+
+        // Update Target Progress
+        val targetGoal = if (metrics.targetGoal > 0) metrics.targetGoal else 10000L
+        val pct = ((metrics.steps.toFloat() / targetGoal.toFloat()) * 100).toInt().coerceIn(0, 100)
+        pbStepsTarget.progress = pct
+
+        if (metrics.targetDurationSec > 0) {
+            val remSec = (metrics.targetDurationSec - metrics.sessionActiveSec).coerceAtLeast(0)
+            val remMin = remSec / 60
+            val remS = remSec % 60
+            tvTargetStatus.text = String.format(Locale.US, "Цели: %d шагов (%d%%) | Осталось: %02d:%02d", targetGoal, pct, remMin, remS)
+        } else {
+            tvTargetStatus.text = String.format(Locale.US, "Цель: %d шагов (%d%%)", targetGoal, pct)
+        }
     }
 
     override fun onHistoryReceived(history: HourlyHistory) {
@@ -252,6 +472,80 @@ class MainActivity : ComponentActivity(), BleManager.BleEventListener {
         logToConsole(message)
     }
 
+    private fun checkPermissionsAndScan() {
+        val permissions = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            permissions.add(Manifest.permission.BLUETOOTH_SCAN)
+            permissions.add(Manifest.permission.BLUETOOTH_CONNECT)
+        }
+        permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        permissions.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+
+        val needed = permissions.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+
+        if (needed.isNotEmpty()) {
+            appPermissionLauncher.launch(needed.toTypedArray())
+        } else {
+            bleManager.startScan()
+        }
+    }
+
+    private fun handleGoogleFitUpload() {
+        val totalSteps = if (lastHistory.total > 0) lastHistory.total else lastMetrics.steps
+        if (totalSteps == 0L) {
+            Toast.makeText(this, "0 steps recorded - nothing to upload", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        lifecycleScope.launch {
+            if (googleFitSyncManager.isHealthConnectAvailable()) {
+                if (googleFitSyncManager.hasHealthConnectPermissions()) {
+                    performHealthConnectUpload()
+                } else {
+                    logToConsole("Requesting Health Connect permissions...")
+                    healthPermissionLauncher.launch(GoogleFitSyncManager.HEALTH_PERMISSIONS)
+                }
+            } else {
+                logToConsole("Health Connect not available. Trying Google Fit Play Services API...")
+                if (googleFitSyncManager.hasGoogleFitApiPermission()) {
+                    googleFitSyncManager.uploadToGoogleFitApi(lastHistory, lastMetrics) { _, msg ->
+                        runOnUiThread {
+                            logToConsole("Google Fit API: $msg")
+                            Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+                        }
+                    }
+                } else {
+                    googleFitSyncManager.requestGoogleFitPermission(this@MainActivity)
+                }
+            }
+        }
+    }
+
+    private fun performHealthConnectUpload() {
+        lifecycleScope.launch {
+            logToConsole("Uploading to Google Fit (Health Connect)...")
+            btnUploadGoogleFit.isEnabled = false
+            val result = googleFitSyncManager.uploadToHealthConnect(lastHistory, lastMetrics)
+            btnUploadGoogleFit.isEnabled = true
+
+            result.onSuccess { recordCount ->
+                val totalSteps = if (lastHistory.total > 0) lastHistory.total else lastMetrics.steps
+                val msg = "Успех! $recordCount записей ($totalSteps шагов) экспортировано в Google Fit!"
+                logToConsole("OK: $msg")
+                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+                tvHistoryStatus.text = "Выгружено: $totalSteps шагов в Google Fit"
+                tvHistoryStatus.setTextColor(0xFF00FFA3.toInt())
+            }.onFailure { err ->
+                val msg = "Ошибка экспорта Health Connect: ${err.message}"
+                logToConsole("ERROR: $msg")
+                Log.e(TAG, "Health Connect error", err)
+                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     private fun logToConsole(message: String) {
         val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
         val entry = "[$time] $message\n"
@@ -265,6 +559,7 @@ class MainActivity : ComponentActivity(), BleManager.BleEventListener {
 
     override fun onDestroy() {
         super.onDestroy()
+        gpsEmulatorManager.stopEmulation()
         bleManager.disconnect()
     }
 }
