@@ -16,6 +16,8 @@ struct StepMetrics {
     uint32_t total_steps;
     uint32_t session_steps;
     uint32_t target_goal;
+    uint32_t target_duration_sec; // Target movement time in seconds (0 = unlimited)
+    uint32_t session_active_sec;  // Time in motion in current session
     uint16_t cadence_spm;        // Current steps per minute
     float speed_kmh;            // Current speed in km/h
     float distance_km;          // Total distance in kilometers
@@ -25,7 +27,12 @@ struct StepMetrics {
     uint8_t current_hour;       // 0 - 23
     uint16_t hourly_steps[24];  // Steps for each hour of the day
     uint32_t daily_history[7];  // Steps for the last 7 days
-    bool goal_reached_alert;    // Flag triggered once when goal is met
+    bool goal_reached_alert;    // Flag triggered once when steps goal is met
+    bool time_reached_alert;    // Flag triggered once when time goal is met
+    float current_lat;          // Current GPS latitude (synced/emulated)
+    float current_lon;          // Current GPS longitude
+    bool has_gps;               // True when GPS coordinates are available
+    char route_name[32];        // Active route name
 };
 
 typedef void (*StepCallback)(const StepMetrics& metrics);
@@ -45,6 +52,10 @@ public:
     void addSteps(uint32_t count);
     void setTotalSteps(uint32_t count);
     void setTargetGoal(uint32_t goal);
+    void setTargetDuration(uint32_t seconds);
+    void setGpsCoordinates(float lat, float lon);
+    void setRouteName(const char* name);
+    void clearTargets();
     void setStrideLength(float meters);
     void setUserWeight(float kg);
     void resetStats();
@@ -58,6 +69,9 @@ public:
     const StepMetrics& getMetrics() const { return _metrics; }
     PedometerMode getMode() const { return _metrics.mode; }
     uint32_t getTotalSteps() const { return _metrics.total_steps; }
+    uint32_t getTargetDuration() const { return _metrics.target_duration_sec; }
+    uint32_t getRemainingDuration() const;
+    bool hasActiveDurationTarget() const { return _metrics.target_duration_sec > 0; }
     uint16_t getCadence() const { return _metrics.cadence_spm; }
     bool isPaused() const { return _metrics.mode == MODE_PAUSED; }
     const char* getModeString() const;

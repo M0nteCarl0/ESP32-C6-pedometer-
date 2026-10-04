@@ -84,8 +84,8 @@ void onStepEvent(const StepMetrics& metrics) {
     // 3. Request immediate UI repaint
     ui_needs_redraw = true;
 
-    // 4. Goal Reached Celebration
-    if (metrics.goal_reached_alert) {
+    // 4. Goal Reached or Time Target Celebration
+    if (metrics.goal_reached_alert || metrics.time_reached_alert) {
         RgbLed.triggerGoalCelebration();
     }
 }

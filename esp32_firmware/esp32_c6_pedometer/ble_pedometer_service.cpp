@@ -166,11 +166,35 @@ void BlePedometerService::_processCommand(const String& cmd) {
         uint32_t steps = upper.substring(idx + 1).toInt();
         Pedometer.setTotalSteps(steps);
     } 
-    else if (upper.startsWith("GOAL:") || upper.startsWith("SET_GOAL:")) {
+    else if (upper.startsWith("GOAL:") || upper.startsWith("SET_GOAL:") || upper.startsWith("TARGET_STEPS:")) {
         int idx = upper.indexOf(':');
         uint32_t goal = upper.substring(idx + 1).toInt();
         if (goal > 0) Pedometer.setTargetGoal(goal);
     } 
+    else if (upper.startsWith("TARGET_TIME:") || upper.startsWith("GOAL_TIME:") || upper.startsWith("TIME_GOAL:")) {
+        int idx = upper.indexOf(':');
+        uint32_t sec = upper.substring(idx + 1).toInt();
+        Pedometer.setTargetDuration(sec);
+    }
+    else if (upper == "CLEAR_GOAL" || upper == "RESET_TARGETS") {
+        Pedometer.clearTargets();
+    }
+    else if (upper.startsWith("GPS:")) {
+        int idx = upper.indexOf(':');
+        String coordStr = cmd.substring(idx + 1); // use original case for coords
+        int commaIdx = coordStr.indexOf(',');
+        if (commaIdx > 0) {
+            float lat = coordStr.substring(0, commaIdx).toFloat();
+            float lon = coordStr.substring(commaIdx + 1).toFloat();
+            Pedometer.setGpsCoordinates(lat, lon);
+        }
+    }
+    else if (upper.startsWith("ROUTE:")) {
+        int idx = cmd.indexOf(':');
+        String rname = cmd.substring(idx + 1);
+        rname.trim();
+        Pedometer.setRouteName(rname.c_str());
+    }
     else if (upper.startsWith("TIME_HR:")) {
         int idx = upper.indexOf(':');
         uint8_t hour = upper.substring(idx + 1).toInt();

@@ -406,14 +406,23 @@ void DisplayDriver::renderStaticLayout() {
 }
 
 void DisplayDriver::renderPedometerDashboard(const StepMetrics& metrics, bool ble_connected, uint8_t battery_pct) {
-    // 1. TOP HEADER (BLE, Mode Badge, Battery)
+    // 1. TOP HEADER (BLE, GPS, Mode Badge, Battery)
     // BLE indicator
     if (ble_connected) {
-        fillRoundRect(8, 4, 38, 18, 4, COLOR_BLE_BLUE);
-        drawString("BLE", 14, 9, 1, COLOR_WHITE, COLOR_BLE_BLUE);
+        fillRoundRect(6, 4, 30, 18, 4, COLOR_BLE_BLUE);
+        drawString("BLE", 11, 9, 1, COLOR_WHITE, COLOR_BLE_BLUE);
     } else {
-        fillRoundRect(8, 4, 38, 18, 4, COLOR_GRAY_DARK);
-        drawString("BLE", 14, 9, 1, COLOR_GRAY_LIGHT, COLOR_GRAY_DARK);
+        fillRoundRect(6, 4, 30, 18, 4, COLOR_GRAY_DARK);
+        drawString("BLE", 11, 9, 1, COLOR_GRAY_LIGHT, COLOR_GRAY_DARK);
+    }
+
+    // GPS indicator
+    if (metrics.has_gps) {
+        fillRoundRect(38, 4, 28, 18, 4, COLOR_CYAN);
+        drawString("GPS", 43, 9, 1, COLOR_BLACK, COLOR_CYAN);
+    } else {
+        fillRoundRect(38, 4, 28, 18, 4, COLOR_GRAY_DARK);
+        drawString("GPS", 43, 9, 1, COLOR_GRAY_LIGHT, COLOR_GRAY_DARK);
     }
 
     // Mode Pill Badge
@@ -422,16 +431,16 @@ void DisplayDriver::renderPedometerDashboard(const StepMetrics& metrics, bool bl
     else if (metrics.mode == MODE_JOGGING) mode_color = COLOR_YELLOW;
     else if (metrics.mode == MODE_RUNNING) mode_color = COLOR_ORANGE;
 
-    fillRoundRect(50, 4, 58, 18, 4, COLOR_CARD_BG);
-    drawRoundRect(50, 4, 58, 18, 4, mode_color);
+    fillRoundRect(68, 4, 52, 18, 4, COLOR_CARD_BG);
+    drawRoundRect(68, 4, 52, 18, 4, mode_color);
     const char* mode_str = Pedometer.getModeString();
-    int16_t mode_x = 79 - (strlen(mode_str) * 3);
+    int16_t mode_x = 94 - (strlen(mode_str) * 3);
     drawString(mode_str, mode_x, 9, 1, mode_color, COLOR_CARD_BG);
 
     // Battery / Status (Right)
     char bat_buf[8];
     snprintf(bat_buf, sizeof(bat_buf), "%u%%", battery_pct);
-    drawString(bat_buf, 138, 9, 1, COLOR_WHITE, COLOR_BG);
+    drawString(bat_buf, 126, 9, 1, COLOR_WHITE, COLOR_BG);
 
     // 2. MAIN STEP WIDGET
     // Large Digits
@@ -442,11 +451,17 @@ void DisplayDriver::renderPedometerDashboard(const StepMetrics& metrics, bool bl
     if (progress > 1.0f) progress = 1.0f;
     _drawArcProgressBar(86, 92, 0, 6, progress, COLOR_GREEN_NEON, COLOR_GRAY_DARK);
 
-    char goal_buf[32];
+    char goal_buf[36];
     uint16_t pct = (uint16_t)((float)metrics.total_steps * 100.0f / (float)metrics.target_goal);
-    snprintf(goal_buf, sizeof(goal_buf), "Goal: %u (%u%%)", metrics.target_goal, pct);
+    if (metrics.target_duration_sec > 0) {
+        uint32_t tgt_min = metrics.target_duration_sec / 60;
+        snprintf(goal_buf, sizeof(goal_buf), "Goal: %u | Tgt: %um", metrics.target_goal, tgt_min);
+    } else {
+        snprintf(goal_buf, sizeof(goal_buf), "Goal: %u (%u%%)", metrics.target_goal, pct);
+    }
     int16_t goal_x = (LCD_WIDTH - (strlen(goal_buf) * 6)) / 2;
-    fillRect(10, 114, LCD_WIDTH - 20, 12, COLOR_BG);
+    if (goal_x < 2) goal_x = 2;
+    fillRect(2, 114, LCD_WIDTH - 4, 12, COLOR_BG);
     drawString(goal_buf, goal_x, 114, 1, COLOR_GRAY_LIGHT, COLOR_BG);
 
     // 3. METRIC VALUES UPDATE (Dirty region clearing)
@@ -474,20 +489,41 @@ void DisplayDriver::renderPedometerDashboard(const StepMetrics& metrics, bool bl
     fillRect(94, 232, 45, 16, COLOR_CARD_BG);
     drawString(spd_buf, 96, 232, 2, COLOR_YELLOW, COLOR_CARD_BG);
 
-    // 4. FOOTER: Active Time & Button hints
-    uint32_t hrs = metrics.active_seconds / 3600;
-    uint32_t mins = (metrics.active_seconds % 3600) / 60;
-    uint32_t secs = metrics.active_seconds % 60;
-    char time_buf[24];
-    snprintf(time_buf, sizeof(time_buf), "Active %02u:%02u:%02u", hrs, mins, secs);
-    fillRect(10, 278, LCD_WIDTH - 20, 12, COLOR_BG);
+    // 4. FOOTER: Active Time & Target / GPS status
+    char time_buf[28];
+    if (metrics.target_duration_sec > 0) {
+        uint32_t rem = Pedometer.getRemainingDuration();
+        uint32_t act_min = metrics.session_active_sec / 60;
+        uint32_t act_sec = metrics.session_active_sec % 60;
+        uint32_t rem_min = rem / 60;
+        uint32_t rem_sec = rem % 60;
+        snprintf(time_buf, sizeof(time_buf), "%02u:%02u / Rem %02u:%02u", act_min, act_sec, rem_min, rem_sec);
+    } else {
+        uint32_t hrs = metrics.active_seconds / 3600;
+        uint32_t mins = (metrics.active_seconds % 3600) / 60;
+        uint32_t secs = metrics.active_seconds % 60;
+        snprintf(time_buf, sizeof(time_buf), "Active %02u:%02u:%02u", hrs, mins, secs);
+    }
+    fillRect(6, 278, LCD_WIDTH - 12, 12, COLOR_BG);
     int16_t time_x = (LCD_WIDTH - (strlen(time_buf) * 6)) / 2;
+    if (time_x < 4) time_x = 4;
     drawString(time_buf, time_x, 278, 1, COLOR_WHITE, COLOR_BG);
 
-    // Hint text
-    const char* hint = "BOOT: Mode | Hold: P/R";
-    int16_t hint_x = (LCD_WIDTH - (strlen(hint) * 6)) / 2;
-    drawString(hint, hint_x, 298, 1, COLOR_GRAY_LIGHT, COLOR_BG);
+    // Hint text or GPS info
+    char hint_buf[32];
+    if (metrics.has_gps) {
+        if (metrics.route_name[0] != '\0') {
+            snprintf(hint_buf, sizeof(hint_buf), "%.18s", metrics.route_name);
+        } else {
+            snprintf(hint_buf, sizeof(hint_buf), "GPS: %.3f, %.3f", metrics.current_lat, metrics.current_lon);
+        }
+    } else {
+        snprintf(hint_buf, sizeof(hint_buf), "BOOT: Mode | Hold: P/R");
+    }
+    fillRect(4, 298, LCD_WIDTH - 8, 12, COLOR_BG);
+    int16_t hint_x = (LCD_WIDTH - (strlen(hint_buf) * 6)) / 2;
+    if (hint_x < 4) hint_x = 4;
+    drawString(hint_buf, hint_x, 298, 1, metrics.has_gps ? COLOR_CYAN : COLOR_GRAY_LIGHT, COLOR_BG);
 }
 
 void DisplayDriver::renderStepPulseAnimation(uint8_t frame) {

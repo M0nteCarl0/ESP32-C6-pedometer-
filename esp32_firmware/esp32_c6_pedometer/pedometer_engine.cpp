@@ -37,10 +37,15 @@ void PedometerEngine::update() {
 
         if (_metrics.mode != MODE_PAUSED) {
             _metrics.active_seconds++;
-            
-            // Increment hourly bucket
-            if (_metrics.current_hour < 24) {
-                // Hourly bucket tracks steps naturally
+            _metrics.session_active_sec++;
+
+            // Target duration reached check
+            if (_metrics.target_duration_sec > 0 && _metrics.session_active_sec >= _metrics.target_duration_sec) {
+                if (!_metrics.time_reached_alert) {
+                    _metrics.time_reached_alert = true;
+                    setMode(MODE_PAUSED);
+                    if (_callback) _callback(_metrics);
+                }
             }
 
             // Calorie burn accumulation based on MET
@@ -215,6 +220,44 @@ void PedometerEngine::setTargetGoal(uint32_t goal) {
     if (_callback) _callback(_metrics);
 }
 
+void PedometerEngine::setTargetDuration(uint32_t seconds) {
+    _metrics.target_duration_sec = seconds;
+    _metrics.session_active_sec = 0;
+    _metrics.time_reached_alert = false;
+    _saveToNVS();
+    if (_callback) _callback(_metrics);
+}
+
+void PedometerEngine::setGpsCoordinates(float lat, float lon) {
+    _metrics.current_lat = lat;
+    _metrics.current_lon = lon;
+    _metrics.has_gps = true;
+    if (_callback) _callback(_metrics);
+}
+
+void PedometerEngine::setRouteName(const char* name) {
+    if (name) {
+        strncpy(_metrics.route_name, name, sizeof(_metrics.route_name) - 1);
+        _metrics.route_name[sizeof(_metrics.route_name) - 1] = '\0';
+    }
+    if (_callback) _callback(_metrics);
+}
+
+void PedometerEngine::clearTargets() {
+    _metrics.target_duration_sec = 0;
+    _metrics.session_active_sec = 0;
+    _metrics.time_reached_alert = false;
+    _metrics.goal_reached_alert = false;
+    _saveToNVS();
+    if (_callback) _callback(_metrics);
+}
+
+uint32_t PedometerEngine::getRemainingDuration() const {
+    if (_metrics.target_duration_sec == 0) return 0;
+    if (_metrics.session_active_sec >= _metrics.target_duration_sec) return 0;
+    return _metrics.target_duration_sec - _metrics.session_active_sec;
+}
+
 void PedometerEngine::setStrideLength(float meters) {
     if (meters > 0.3f && meters < 2.0f) {
         _stride_length_m = meters;
@@ -231,10 +274,12 @@ void PedometerEngine::setUserWeight(float kg) {
 void PedometerEngine::resetStats() {
     _metrics.total_steps = 0;
     _metrics.session_steps = 0;
+    _metrics.session_active_sec = 0;
     _metrics.distance_km = 0.0f;
     _metrics.calories_kcal = 0.0f;
     _metrics.active_seconds = 0;
     _metrics.goal_reached_alert = false;
+    _metrics.time_reached_alert = false;
     memset(_metrics.hourly_steps, 0, sizeof(_metrics.hourly_steps));
     _steps_since_last_save = 0;
     _saveToNVS();
@@ -243,7 +288,8 @@ void PedometerEngine::resetStats() {
 
 void PedometerEngine::resetSession() {
     _metrics.session_steps = 0;
-    _metrics.active_seconds = 0;
+    _metrics.session_active_sec = 0;
+    _metrics.time_reached_alert = false;
     if (_callback) _callback(_metrics);
 }
 
@@ -272,9 +318,9 @@ const char* PedometerEngine::getModeString() const {
 }
 
 String PedometerEngine::getLiveJson() const {
-    char buf[256];
+    char buf[384];
     snprintf(buf, sizeof(buf),
-        "{\"steps\":%u,\"cadence\":%u,\"speed\":%.2f,\"dist\":%.2f,\"kcal\":%.1f,\"sec\":%u,\"goal\":%u,\"mode\":\"%s\"}",
+        "{\"steps\":%u,\"cadence\":%u,\"speed\":%.2f,\"dist\":%.2f,\"kcal\":%.1f,\"sec\":%u,\"goal\":%u,\"goal_sec\":%u,\"sess_sec\":%u,\"mode\":\"%s\",\"lat\":%.6f,\"lon\":%.6f,\"gps\":%s,\"route\":\"%s\"}",
         _metrics.total_steps,
         _metrics.cadence_spm,
         _metrics.speed_kmh,
@@ -282,7 +328,13 @@ String PedometerEngine::getLiveJson() const {
         _metrics.calories_kcal,
         _metrics.active_seconds,
         _metrics.target_goal,
-        getModeString()
+        _metrics.target_duration_sec,
+        _metrics.session_active_sec,
+        getModeString(),
+        _metrics.current_lat,
+        _metrics.current_lon,
+        _metrics.has_gps ? "true" : "false",
+        _metrics.route_name
     );
     return String(buf);
 }
@@ -319,6 +371,7 @@ void PedometerEngine::_saveToNVS() {
     _prefs.putFloat("kcal", _metrics.calories_kcal);
     _prefs.putUInt("sec", _metrics.active_seconds);
     _prefs.putUInt("goal", _metrics.target_goal);
+    _prefs.putUInt("goal_sec", _metrics.target_duration_sec);
     _prefs.putUChar("mode", (uint8_t)_metrics.mode);
     _prefs.putUShort("cadence", _metrics.cadence_spm);
     _prefs.putBytes("hourly", _metrics.hourly_steps, sizeof(_metrics.hourly_steps));
@@ -336,6 +389,7 @@ void PedometerEngine::_loadFromNVS() {
         _metrics.calories_kcal = _prefs.getFloat("kcal", 0.0f);
         _metrics.active_seconds = _prefs.getUInt("sec", 0);
         _metrics.target_goal = _prefs.getUInt("goal", DEFAULT_DAILY_GOAL);
+        _metrics.target_duration_sec = _prefs.getUInt("goal_sec", DEFAULT_TARGET_DURATION_SEC);
         _metrics.mode = (PedometerMode)_prefs.getUChar("mode", (uint8_t)MODE_WALKING);
         _metrics.cadence_spm = _prefs.getUShort("cadence", CADENCE_WALK_DEFAULT);
         _prefs.getBytes("hourly", _metrics.hourly_steps, sizeof(_metrics.hourly_steps));

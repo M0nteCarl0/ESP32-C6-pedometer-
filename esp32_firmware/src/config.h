@@ -67,6 +67,7 @@
 // ============================================================================
 
 #define DEFAULT_DAILY_GOAL          10000   // Steps
+#define DEFAULT_TARGET_DURATION_SEC 0       // 0 = unlimited movement time
 #define DEFAULT_STRIDE_LENGTH_M     0.75f   // Meters per step (average adult)
 #define DEFAULT_USER_WEIGHT_KG      70.0f   // For calorie estimation
 
