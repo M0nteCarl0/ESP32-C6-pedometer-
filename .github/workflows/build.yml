@@ -146,5 +146,13 @@ jobs:
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
           name: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+          body: |
+            Prebuilt binaries:
+
+            - `esp32-c6-pedometer-factory.bin` - a single image to flash at offset `0x0`, for example with the Espressif Flash Download Tool or `esptool`
+            - `esp32-c6-pedometer-firmware.bin` - application image for OTA updates
+            - `esp32-c6-pedometer-bootloader.bin` - bootloader image, for manual flashing at `0x0`
+            - `esp32-c6-pedometer-partitions.bin` - partition table, for manual flashing at `0x8000`
+            - `esp32-pedometer-sync-debug.apk` - Android companion app (debug build)
           files: release-assets/*
           generate_release_notes: true

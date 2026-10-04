@@ -89,7 +89,7 @@ A complete smart step-counter / fitness-tracker firmware for the [**Waveshare ES
 
 ## Build and flash
 
-Prebuilt binaries are attached to every release: `esp32-c6-pedometer-factory.bin` (a single image to flash at offset `0x0`, for example with the Espressif Flash Download Tool or `esptool`), `esp32-c6-pedometer-firmware.bin` (application image for OTA updates) and `esp32-pedometer-sync-debug.apk`. The `Build` GitHub Actions workflow produces them on every push and publishes them when a `v*` tag is pushed.
+Prebuilt binaries are attached to every release: `esp32-c6-pedometer-factory.bin` (a single image to flash at offset `0x0`, for example with the Espressif Flash Download Tool or `esptool`), `esp32-c6-pedometer-firmware.bin` (application image for OTA updates), `esp32-c6-pedometer-bootloader.bin` and `esp32-c6-pedometer-partitions.bin` (bootloader and partition table, for manual flashing at `0x0` and `0x8000`) and `esp32-pedometer-sync-debug.apk` (Android companion app, debug build). The `Build` GitHub Actions workflow produces them on every push and publishes them when a `v*` tag is pushed.
 
 ### Option A: PlatformIO (VS Code) - recommended
 
