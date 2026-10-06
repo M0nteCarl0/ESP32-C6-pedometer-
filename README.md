@@ -5,10 +5,8 @@
   <a href="https://github.com/M0nteCarl0/ESP32-C6-pedometer-/releases/latest"><img src="https://img.shields.io/github/v/release/M0nteCarl0/ESP32-C6-pedometer-?label=release" alt="Latest release"></a>
   <a href="https://github.com/M0nteCarl0/ESP32-C6-pedometer-/releases"><img src="https://img.shields.io/github/release-date/M0nteCarl0/ESP32-C6-pedometer-?label=released" alt="Release date"></a>
   <a href="https://github.com/M0nteCarl0/ESP32-C6-pedometer-/releases"><img src="https://img.shields.io/github/downloads/M0nteCarl0/ESP32-C6-pedometer-/total?label=downloads" alt="Release downloads"></a>
-  <a href="https://github.com/M0nteCarl0/ESP32-C6-pedometer-/graphs/traffic"><img src="https://img.shields.io/badge/clones%20(14d)-116%20%2F%2059%20unique-blue" alt="Repository clones over the last 14 days: 116 total, 59 unique (snapshot of 2026-10-06; GitHub does not publish clone counts as a live badge)"></a>
+  <a href="https://github.com/M0nteCarl0/ESP32-C6-pedometer-/graphs/traffic"><img src="https://img.shields.io/badge/clones%20(14d)-116%20%2F%2059%20unique-blue" alt="Repository clones (last 14 days)"></a>
 </p>
-
-The clone figures are a manual snapshot taken from the repository traffic API on 2026-10-06, because GitHub only exposes clones to the repository owner, for a rolling 14-day window.
 
 A complete smart step-counter / fitness-tracker firmware for the [**Waveshare ESP32-C6-LCD-1.47**](https://www.waveshare.com/esp32-c6-lcd-1.47.htm) board (1.47" color IPS display, ST7789 172x320), with an addressable WS2812 RGB LED, NVS flash persistence, a Bluetooth LE **Running Speed and Cadence (RSC)** profile, a browser-based companion panel, and a native Android app with GPS route emulation.
 
